@@ -72,5 +72,9 @@ saveDetail = async function(){ const p=state.products.find(x=>x.id===state.curre
 deleteProduct = async function(){ if(!confirm('¿Eliminar este producto y sus generaciones?')) return; try { await apiFetch(`/api/products/${state.current}`,{method:'DELETE'}); state.products=state.products.filter(p=>p.id!==state.current); state.page='products'; render(); } catch(error){ alert(error.message); } };
 refine = async function(i){ const input=document.querySelector(`[data-refine="${i}"]`); const p=state.products.find(x=>x.id===state.current); if(!input?.value.trim()) return; try { await apiFetch(`/api/products/images/${p.images[i].id}/refine`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:input.value})}); p.images[i].status='PENDING'; render(); await pollRemote(p.id); } catch(error){ alert(error.message); } };
 downloadZip = async function(){ try { const response=await fetch(`${API_BASE}/api/products/${state.current}/export`); if(!response.ok) throw new Error('Aún no hay imágenes generadas para exportar.'); const blob=await response.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='producto.zip'; a.click(); } catch(error){ alert(error.message); } };
+const baseSettingsPage = settingsPage;
+settingsPage = function(){
+  return baseSettingsPage().replace('<select id="model">', '<select id="model"><option value="fal-ai/flux-2-lora-gallery/add-background" '+(state.settings.model==='fal-ai/flux-2-lora-gallery/add-background'?'selected':'')+'>fal-ai/flux-2-lora-gallery/add-background · recomendado para fondos</option>');
+};
 syncRemote();
 
