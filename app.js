@@ -21,3 +21,56 @@ function validateKey(){const key=document.querySelector('#api-key').value.trim()
 function downloadZip(){const p=state.products.find(x=>x.id===state.current);const txt=new Blob([p.description||''],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(txt);a.download=`${(p.title||'producto').replace(/[^a-z0-9áéíóúñ _-]/gi,'').trim()||'producto'}-descripcion.txt`;a.click();alert('La descripción se ha descargado. En producción, el servidor empaqueta aquí las imágenes en un ZIP numerado.')}
 render();
 
+// ───────────────────────── Supabase API ─────────────────────────
+const API_BASE = 'https://owhnowwgygdvxdojnqph.supabase.co/functions/v1/vinted-api';
+state.remoteConfigured = false;
+const apiFetch = async (path, options = {}) => {
+  const response = await fetch(`${API_BASE}${path}`, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || `La API respondió con el error ${response.status}.`);
+  return data;
+};
+const fromRemote = p => ({
+  ...p,
+  mode: p.style === 'HANGER' ? 'hanger' : p.style === 'SURFACE' ? 'flat' : 'custom',
+  images: (p.images || []).map(im => {
+    const generation = im.generations?.[0];
+    return { id: im.id, src: im.originalUrl, generated: generation?.resultUrl || null, status: generation?.status || 'PENDING', error: generation?.error || '' };
+  })
+});
+const syncRemote = async () => {
+  try {
+    const status = await apiFetch('/api/settings/status');
+    state.remoteConfigured = !!status.isValid;
+    state.settings.key = state.remoteConfigured ? 'remote' : '';
+    state.settings.model = status.model || state.settings.model;
+    if (state.remoteConfigured) state.products = (await apiFetch('/api/products')).map(fromRemote);
+    render();
+  } catch (error) { console.warn('Supabase no disponible:', error.message); }
+};
+const dataUrlBlob = async dataUrl => await (await fetch(dataUrl)).blob();
+const remoteGenerate = async () => {
+  if (!state.remoteConfigured) return generateLocalFallback();
+  if (state.mode === 'custom') {
+    if (!state.draftPrompt.trim()) return alert('Escribe un prompt para generar la imagen.');
+    const product = await apiFetch('/api/custom/generate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({prompt: state.draftPrompt}) });
+    state.current = product.id; state.products = [fromRemote(product), ...state.products]; state.page = 'detail'; render(); return;
+  }
+  if (!state.draftImages.length) return alert('Añade al menos una fotografía.');
+  const form = new FormData(); form.append('style', state.mode === 'hanger' ? 'HANGER' : 'SURFACE');
+  for (let i = 0; i < state.draftImages.length; i++) form.append('files', await dataUrlBlob(state.draftImages[i].src), `foto-${i + 1}.jpg`);
+  const product = await apiFetch('/api/products', { method: 'POST', body: form });
+  if (state.draftTitle || state.draftDescription) await apiFetch(`/api/products/${product.id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({title:state.draftTitle,description:state.draftDescription}) });
+  await apiFetch(`/api/products/${product.id}/generate`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({style:state.mode === 'hanger' ? 'HANGER' : 'SURFACE'}) });
+  state.current = product.id; state.page = 'detail'; render(); await pollRemote(product.id);
+};
+const pollRemote = async id => { for (let i=0;i<40;i++){ await new Promise(r=>setTimeout(r,3000)); try { const p=fromRemote(await apiFetch(`/api/products/${id}`)); const idx=state.products.findIndex(x=>x.id===id); if(idx>=0) state.products[idx]=p; else state.products.unshift(p); render(); if(p.images.every(im=>im.status==='DONE'||im.status==='FAILED')) return; } catch { return; } } };
+const generateLocalFallback = generate;
+generate = remoteGenerate;
+validateKey = async function(){ const key=document.querySelector('#api-key')?.value.trim(); if(!key) return alert('Introduce una clave de fal.ai para validarla.'); try { await apiFetch('/api/settings/api-key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'fal',apiKey:key,model:document.querySelector('#model')?.value||'fal-ai/flux/dev/image-to-image'})}); state.settings.key='remote'; state.remoteConfigured=true; save(); alert('Clave válida. La clave queda guardada de forma cifrada en Supabase.'); await syncRemote(); } catch(error){ alert(error.message); } };
+saveDetail = async function(){ const p=state.products.find(x=>x.id===state.current); try { await apiFetch(`/api/products/${p.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:document.querySelector('#edit-title').value,description:document.querySelector('#edit-description').value})}); await syncRemote(); } catch(error){ alert(error.message); } };
+deleteProduct = async function(){ if(!confirm('¿Eliminar este producto y sus generaciones?')) return; try { await apiFetch(`/api/products/${state.current}`,{method:'DELETE'}); state.products=state.products.filter(p=>p.id!==state.current); state.page='products'; render(); } catch(error){ alert(error.message); } };
+refine = async function(i){ const input=document.querySelector(`[data-refine="${i}"]`); const p=state.products.find(x=>x.id===state.current); if(!input?.value.trim()) return; try { await apiFetch(`/api/products/images/${p.images[i].id}/refine`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:input.value})}); p.images[i].status='PENDING'; render(); await pollRemote(p.id); } catch(error){ alert(error.message); } };
+downloadZip = async function(){ try { const response=await fetch(`${API_BASE}/api/products/${state.current}/export`); if(!response.ok) throw new Error('Aún no hay imágenes generadas para exportar.'); const blob=await response.blob(); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='producto.zip'; a.click(); } catch(error){ alert(error.message); } };
+syncRemote();
+
