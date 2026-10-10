@@ -21,7 +21,7 @@ export default function Home() {
           <b>{st.offline ? 'No se puede conectar con el servidor.' : 'Configura la API para usar la app.'}</b>
           <br />
           <span className="sub">
-            {st.offline ? 'Arranca la API con «npm run dev:api».' : 'Sin una clave válida en Ajustes, los productos y el botón + están bloqueados.'}
+            {st.offline ? 'Comprueba que la función vinted-api de Supabase está desplegada y que NEXT_PUBLIC_API_URL es correcta.' : 'Sin una clave válida en Ajustes, los productos y el botón + están bloqueados.'}
           </span>
         </div>
         {!st.offline && <Link className="btn" href="/settings">Ir a Ajustes</Link>}

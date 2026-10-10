@@ -1,32 +1,28 @@
 # Vinted Studio
 
-Next.js (web) + Express (API) + Supabase (base de datos PostgreSQL y fotos). Requisitos: Node.js 20 o superior.
+Next.js (web, en Vercel) + API como **Edge Function de Supabase** (`supabase/functions/vinted-api`) + base de datos PostgreSQL y fotos en Supabase.
+Sin servidores que mantener y sin tarjeta.
 
-## 1. Supabase (gratis)
-1. Crea un proyecto en supabase.com. Apunta la contraseña de la base de datos.
-2. Botón **Connect**: copia la cadena «Transaction pooler» (puerto 6543) y la «Session pooler» (puerto 5432).
-3. **Project Settings > API**: copia la URL del proyecto y la clave secreta (service_role).
-4. No hace falta crear el bucket de fotos: la API crea uno público llamado `photos` al arrancar.
+## Backend (Supabase) — ya desplegado
+- Tablas `Settings`, `Product`, `Image`, `Generation` y bucket público `photos`.
+- Función `vinted-api` (sin verificación JWT de Supabase: usa su propia sesión con `APP_PASSWORD`).
+- **Secretos de la función** (Supabase > Edge Functions > Secrets):
+  - `APP_PASSWORD` (opcional): contraseña para entrar. **Si no la pones, la app no pide contraseña** y cualquiera con la URL puede usarla (y gastar tu clave de IA).
+  - `ENCRYPTION_SECRET` (obligatorio): texto largo y secreto (mínimo 16 caracteres). Cifra la clave de IA y firma las sesiones.
+  - `WEB_ORIGIN` (opcional): URL de Vercel sin barra final; si la pones, solo esa web podrá llamar a la API.
+- Comprobación: abre `https://owhnowwgygdvxdojnqph.supabase.co/functions/v1/vinted-api/health`; debe responder `{"ok":true,"configured":true}`.
+- Redesplegar tras cambios: `supabase functions deploy vinted-api --no-verify-jwt` (la configuración está en `supabase/config.toml`).
 
-## 2. En tu PC (D:\vinted-studio)
+## Frontend (Vercel)
+1. Sube el proyecto a GitHub.
+2. Vercel > Add New Project > el repo > **Root Directory: `apps/web`**.
+3. Variable de entorno `NEXT_PUBLIC_API_URL` = `https://owhnowwgygdvxdojnqph.supabase.co/functions/v1/vinted-api`.
+4. Entra en la URL de Vercel, escribe tu contraseña y valida tu clave de IA en Ajustes.
+
+## En local
 ```
 npm install
-cd apps\api
-copy .env.example .env      (rellena los valores; APP_PASSWORD puede quedar vacío en local)
-npx prisma db push
-cd ..\web
-copy .env.local.example .env.local
-cd ..\..
-npm run dev:api
-npm run dev:web             (en otra terminal)
+cd apps/web && copy .env.local.example .env.local   (o cp en Mac/Linux)
+cd ../.. && npm run dev:web
 ```
-Abre http://localhost:3000, ve a Ajustes y valida tu clave de IA.
-
-## 3. Subirla a internet (todo gratis)
-1. Sube el proyecto a un repositorio de GitHub (el `.gitignore` ya excluye `.env`).
-2. **Render** > New > Blueprint > elige el repo (usa `render.yaml`). Rellena las variables: las de Supabase, `ENCRYPTION_SECRET`, `APP_PASSWORD` (tu contraseña de acceso) y `WEB_ORIGIN` (la URL de Vercel del paso siguiente; puedes ponerla después).
-3. **Vercel** > Add New Project > el mismo repo > **Root Directory: `apps/web`** > variable `NEXT_PUBLIC_API_URL` con la URL de Render.
-4. Vuelve a Render y pon `WEB_ORIGIN` con la URL de Vercel (sin barra final).
-5. Entra a la URL de Vercel, escribe tu contraseña y valida tu clave de IA en Ajustes.
-
-Nota: el plan gratuito de Render se duerme tras 15 minutos sin uso; la primera visita puede tardar cerca de un minuto.
+Abre http://localhost:3000 (si usas `WEB_ORIGIN`, incluye también `http://localhost:3000`, separado por comas).
