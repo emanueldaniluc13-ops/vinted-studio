@@ -1,0 +1,49 @@
+generator client { provider = "prisma-client-js" }
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Settings {
+  id          Int       @id @default(1)
+  provider    String    @default("gemini")
+  apiKeyEnc   String?
+  model       String    @default("gemini-3.1-flash-image-preview")
+  isValid     Boolean   @default(false)
+  validatedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  title     String?
+  description String?
+  style     String   // HANGER | SURFACE
+  status    String   @default("DRAFT") // DRAFT | READY | PUBLISHED
+  images    Image[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Image {
+  id          String       @id @default(cuid())
+  productId   String
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  originalUrl String
+  position    Int          @default(0)
+  generations Generation[]
+}
+
+model Generation {
+  id         String   @id @default(cuid())
+  imageId    String
+  image      Image    @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  resultUrl  String?
+  prompt     String
+  refinement String?
+  status     String   @default("PENDING") // PENDING | DONE | FAILED
+  error      String?
+  isCurrent  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
