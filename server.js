@@ -1,0 +1,4 @@
+const http=require('http');const fs=require('fs');const path=require('path');
+const root=__dirname;const mime={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.js':'text/javascript; charset=utf-8','.json':'application/json'};
+const server=http.createServer(async(req,res)=>{if(req.url.startsWith('/api/')){if(req.url==='/api/health'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({configured:Boolean(process.env.FAL_KEY)}));return}res.writeHead(404);res.end();return}let file=path.join(root,req.url==='/'?'index.html':req.url);if(!file.startsWith(root)||!fs.existsSync(file)){res.writeHead(404);res.end('Not found');return}res.writeHead(200,{'Content-Type':mime[path.extname(file)]||'application/octet-stream'});fs.createReadStream(file).pipe(res)});server.listen(process.env.PORT||3000,()=>console.log('Vinted Studio running on http://localhost:'+(process.env.PORT||3000)));
+
